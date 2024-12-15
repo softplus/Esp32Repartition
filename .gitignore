@@ -1,5 +1,6 @@
 .pio/
 .vscode/
+sdkconfig.*.old
 
 # Prerequisites
 *.d
