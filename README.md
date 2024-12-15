@@ -44,6 +44,8 @@ OMG It was painful. Maybe it's normal to some people? Anyway.
 5. Set: `Component config` -> `SPI Flash driver` -> `Writing to dangerous flash regions` -> `Allowed`
 6. Save and exit.
 
+Note you may need to follow the [workaround for Compile Error "esp32-arduino requires CONFIG_FREERTOS_HZ=1000 (currently 100)"](https://github.com/espressif/arduino-esp32/discussions/8375#discussioncomment-7908337) and manually tweak the `cmakelists.txt` file for the ESP32 platform in order to get this to compile.
+
 Now you can build and upload the firmware.
 Note uploading the firmware will reset your partition table to the old WLED partition table as shown in `partitions_old.csv`.
 This allows you to test the functionality.
