@@ -1,6 +1,6 @@
 # Esp32Repartition - Fix old WLED ESP32 partition table devices via OTA
 
-This is a kinda basic hack for updating the partition table of an ESP32 device running WLED via OTA.
+This is a kinda basic hack for updating the partition table of an ESP32 device running [WLED](https://kno.wled.ge/) via OTA.
 This is useful for devices that have an old partition table that doesn't have enough space for the latest WLED firmware.
 This is a workaround for the issue described in [this issue](https://github.com/Aircoookie/WLED/issues/4369).
 
@@ -21,12 +21,12 @@ Risk: This can brick your ESP32 device and require a USB firmware reinstall. I a
 
 ## Usage
 
-1. Upload this firmware to your ESP32 device using the WLED firmware update page.
+1. Upload this [firmware](https://github.com/softplus/Esp32Repartition/releases) to your ESP32 device using the WLED firmware update page.
 2. It will create an access point called `EPM-AP`, with password `wled1234`. Connect to it.
 3. Go to `http://4.3.3.4/` in your browser. This will take you to the main menu.
 4. Click `Configure Wifi` and set up your actual wifi. The device will reboot.
 5. Find the IP of the device, and connect to it.
-6. Click `Fix partitions`, and await the results.
+6. Click `Fix partitions`, and await the results. If it says that it's not on the first partition, upload this firmware again, and try again.
 7. If you're ok, it'll say ready on the bottom and reboot.
 8. Reconnect to `EPM-AP`, set your wifi again, reboot, find the device and connect to it.
 9. Check `Read partitions` to see if it worked.
@@ -76,6 +76,7 @@ cp .pio/build/esp32dev/firmware.bin build/esp32-repart.bin
 ## Other
 
 Licensed under the MIT license.
+[WLED](https://kno.wled.ge/) is awesome and you should check it out.
 
 *Disclaimer:*
 
