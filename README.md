@@ -7,6 +7,9 @@ This is a workaround for the issue described in [this issue](https://github.com/
 *Use at your own risk.*
 
 Risk: This can brick your ESP32 device and require a USB firmware reinstall. I am not responsible for any damage caused by this software.
+This code is not tested on many devices. Use at your own risk, really.
+Also, make sure your device doesn't randomly get rebooted / have bad power;
+if it stops at the wrong time (the window is short), it can disable your partition table and require a USB firmware reinstall.
 
 ## What it does
 
@@ -27,12 +30,15 @@ Risk: This can brick your ESP32 device and require a USB firmware reinstall. I a
 3. Go to `http://4.3.3.4/` in your browser. This will take you to the main menu.
 4. Click `Configure Wifi` and set up your actual wifi. The device will reboot.
 5. Find the IP of the device, and connect to it.
-6. Click `Fix partitions`, and await the results. If it says that it's not on the first partition, upload this firmware again, and try again.
-7. If you're ok, it'll say ready on the bottom and reboot.
-8. Reconnect to `EPM-AP`, set your wifi again, reboot, find the device and connect to it.
-9. Check `Read partitions` to see if it worked.
-10. Upload your desired firmware update.
-11. Good luck.
+6. Click `Read partitions` to see the current partition table.
+This should look reasonable before proceeding, otherwise it might not be able to read your device's partition table.
+It will also tell you if you're in the right app partition.
+7. Click `Fix partitions`, and await the results. If it says that it's not on the first partition, upload this firmware again, and try again.
+8. If you're ok, it'll say ready on the bottom and reboot.
+9. Reconnect to `EPM-AP`, set your wifi again, reboot, find the device and connect to it.
+10. Check `Read partitions` to see if it worked.
+11. Upload your desired firmware update.
+12. Good luck.
 
 ## Building
 
