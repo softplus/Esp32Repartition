@@ -17,7 +17,8 @@ Risk: This can brick your ESP32 device and require a USB firmware reinstall. I a
 5. It will recreate the checksum for the partitions.
 6. It will reboot the device.
 7. You can now install the latest WLED firmware via OTA.
-8. Feel free to breathe again.
+8. Connect to 'WLED-AP' and set up your wifi.
+9. Feel free to breathe again.
 
 ## Usage
 
