@@ -25,20 +25,21 @@ if it stops at the wrong time (the window is short), it can disable your partiti
 
 ## Usage
 
-1. Upload this [firmware](https://github.com/softplus/Esp32Repartition/releases) to your ESP32 device using the WLED firmware update page.
-2. It will create an access point called `EPM-AP`, with password `wled1234`. Connect to it.
-3. Go to `http://4.3.3.4/` in your browser. This will take you to the main menu.
-4. Click `Configure Wifi` and set up your actual wifi. The device will reboot.
-5. Find the IP of the device, and connect to it.
-6. Click `Read partitions` to see the current partition table.
+1. Backup both Prefixes and Configuration from your WLED setup.
+2. Upload this [firmware](https://github.com/softplus/Esp32Repartition/releases) to your ESP32 device using the WLED firmware update page.
+3. It will create an access point called `EPM-AP`, with password `wled1234`. Connect to it.
+4. Go to `http://4.3.3.4/` in your browser. This will take you to the main menu.
+5. Click `Configure Wifi` and set up your actual wifi. The device will reboot.
+6. Find the IP of the device, and connect to it.
+7. Click `Read partitions` to see the current partition table.
 This should look reasonable before proceeding, otherwise it might not be able to read your device's partition table.
 It will also tell you if you're in the right app partition.
-7. Click `Fix partitions`, and await the results. If it says that it's not on the first partition, upload this firmware again, and try again.
-8. If you're ok, it'll say ready on the bottom and reboot.
-9. Reconnect to `EPM-AP`, set your wifi again, reboot, find the device and connect to it.
-10. Check `Read partitions` to see if it worked.
-11. Upload your desired firmware update.
-12. Good luck.
+8. Click `Fix partitions`, and await the results. If it says that it's not on the first partition, upload this firmware again, and try again.
+9. If you're ok, it'll say ready on the bottom and reboot.
+10. Reconnect to `EPM-AP`, set your wifi again, reboot, find the device and connect to it.
+11. Check `Read partitions` to see if it worked.
+12. Upload your desired firmware update. Connect to WLED's AP, set your wifi settings, restore prefixes and configuration.
+13. Good luck.
 
 ## Building
 
