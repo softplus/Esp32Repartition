@@ -65,9 +65,17 @@ This has only been tried on these devices. Your mileage may vary. Prepare the US
 
 * 2024-12-15: Initial release - v0.1.0
 
+## My notes
+
+For releases:
+
+```bash
+cp .pio/build/esp32dev/firmware.bin build/esp32-repart.bin
+```
+
 ## Other
 
-Licensed under the MIT license  
+Licensed under the MIT license.
 
 *Disclaimer:*
 
