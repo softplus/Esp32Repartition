@@ -29,10 +29,15 @@
  * Note 2: It expects a partition table with app0, app1, data in that order, nothing behind it.
  * 
  * Note 3: It empties app1 & data partitions, and resizes app0 & app1.
+ * 
+ * WLED: https://kno.wled.ge/ & https://github.com/Aircoookie/WLED
+ * PlatformIO: https://platformio.org/
+ * WiFiManager: https://github.com/tzapu/WiFiManager
+ * 
  */
 
 #include <Arduino.h>
-#include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
+#include <WiFiManager.h>
 #include "part_mgr.h"
 
 WiFiManager wm;
@@ -44,7 +49,6 @@ void handlePartitionFix();
 // bind the server callbacks
 void bindServerCallback(){
   wm.server->on("/partition-read", handlePartitionRead);  // add new route
-  wm.server->on("/partition-fix", handlePartitionFix);  // add new route
   wm.server->on("/partition-fix", handlePartitionFix);  // add new route
 }
 
@@ -101,8 +105,8 @@ void setup()
 }
 
 // If you're watching the serial, this will tell you it's still working.
-uint32_t nextTime;
 void watchdog_loop() {
+  static uint32_t nextTime = 0;
   if (millis() > nextTime) {
     Serial.print(".");
     nextTime = millis() + 30000;

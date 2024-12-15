@@ -10,7 +10,7 @@
 #include "part_mgr.h"
 #include <MD5Builder.h>
 
-// wild ass crazy shit
+// no-idea-dog.jpg
 
 // Definitions from the ESP SDK & from poking around.
 #define PARTITION_TABLE_SIZE 0x0C00
