@@ -39,7 +39,7 @@ size_t getPartitionTableAddr() {
     if (cached_addr != 0) {
         return cached_addr;
     }
-    uint8_t b_buffer[256];
+    uint8_t b_buffer[4];
     for (size_t addr = 0; addr < 0xA000; addr += 0x1000) {
         DEBUG_PRINTF("Checking for partition table at 0x%08x\n", addr);
         esp_err_t err = spi_flash_read(addr, b_buffer, sizeof(b_buffer));
@@ -62,8 +62,6 @@ void _add_output(std::unique_ptr<WebServer> & ws, const char *str) {
 };
 void _add_output(std::unique_ptr<WebServer> & ws, const String& str) {
     _add_output(ws, str.c_str());
-    //ws->sendContent(str.c_str(), str.length());
-    //DEBUG_PRINT(str);
 };
 
 // Expand app partitions to our ideal size, output to response 
@@ -119,6 +117,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     if (err != ESP_OK) {
         snprintf(c_buffer, sizeof(c_buffer), "Failed to read partition table: 0x%x\n", err);
         _add_output(ws, c_buffer);
+        free(partition_buffer);
         return;
     }
     _add_output(ws, "Done reading.\n");
@@ -189,6 +188,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     }
     if (any_errors) {
         _add_output(ws, "Aborting.");
+        free(partition_buffer);
         return;
     }
     _add_output(ws, "Partition order is app, app, data: OK\n");
@@ -199,6 +199,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
         _add_output(ws, "\nUNNECESSARY: App partitions are already ideal size.\n");
         _add_output(ws, "\nREADY TO GO - upload the firmware you want.\n");
         _add_output(ws, "<a href='/update'>Upload new firmware</a>\n");
+        free(partition_buffer);
         return;
     }
     // check if data partition is large enough
@@ -206,6 +207,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
         (partitions[app1_index]->size - RESIZE_APP_PARTITION_SIZE) +
         (partitions[app0_index]->size - RESIZE_APP_PARTITION_SIZE) ) ) {
         _add_output(ws, "ERROR: Data partition is not large enough to accomodate new app partitions.\n");
+        free(partition_buffer);
         return;
     }
     _add_output(ws, "Data partition is large enough to accomodate new app partitions: OK\n");
@@ -240,11 +242,13 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     _add_output(ws, c_buffer);
     if (new_data_address - partitions[data_index]->address < SPI_FLASH_SEC_SIZE) {
         _add_output(ws, "ERROR: New data partition address offset by at least a sector.\n");
+        free(partition_buffer);
         return;
     }
 
     if (test_only) {
         _add_output(ws, "\nEverything looks good! Try it for real now!\n");
+        free(partition_buffer);
         return;
     }
     _add_output(ws, "\nDoing the work now...\n");
@@ -256,6 +260,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     if (err != ESP_OK) {
         snprintf(c_buffer, sizeof(c_buffer), "Failed to erase data partition: 0x%x\n", err);
         _add_output(ws, c_buffer);
+        free(partition_buffer);
         return;
     }
 
@@ -264,6 +269,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     if (err != ESP_OK) {
         snprintf(c_buffer, sizeof(c_buffer), "Failed to erase app1 partition: 0x%x\n", err);
         _add_output(ws, c_buffer);
+        free(partition_buffer);
         return;
     }
     _add_output(ws, "Partitions data + app1 erased: OK\n");
@@ -300,6 +306,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     if (err != ESP_OK) {
         snprintf(c_buffer, sizeof(c_buffer), "Failed to erase partition table: 0x%x\n", err);
         _add_output(ws, c_buffer);
+        free(partition_buffer);
         return;
     }
     _add_output(ws, "Writing partition table...\n");
@@ -307,6 +314,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     if (err != ESP_OK) {
         snprintf(c_buffer, sizeof(c_buffer), "Failed to write partition table: 0x%x\n", err);
         _add_output(ws, c_buffer);
+        free(partition_buffer);
         return;
     }
     _add_output(ws, "Partition table rewritten: OK\n");
@@ -319,10 +327,14 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     _add_output(ws, "\n");
     _add_output(ws, HTML_OUTRO); // unless we already rebooted, lol
 
-    delay(2000); // to send result before reboot
+    unsigned long start = millis();
+    while (millis() - start < 2000) {
+        // Non-blocking delay
+        delay(100);
+    }
     _add_output(ws, "\n"); // sometimes it just doesn't send the rest. this is a hack.
+    free(partition_buffer);
 
     // send results
     ESP.restart();
-    return;
 }
