@@ -80,6 +80,11 @@ This has only been tried on these devices. Your mileage may vary. Prepare the US
 
 ? Works for me.
 
+* Support data + coredump partitions
+* Move data partition instead of deleting
+* If coredump partition, move it too
+* Find a bunch of bootloaders & get their MD5
+
 ## Changes
 
 * 2024-12-15: Initial release - v0.1.0
