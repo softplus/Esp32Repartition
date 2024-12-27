@@ -1,6 +1,7 @@
 # Esp32Repartition - Fix old WLED ESP32 partition table devices via OTA
 
 This is a kinda basic hack for updating the partition table of an ESP32 device running [WLED](https://kno.wled.ge/) via OTA.
+This creates a 1536KB partition for app0 and app1.
 This is useful for devices that have an old partition table that doesn't have enough space for the latest WLED firmware.
 This is a workaround for the issue described in [this issue](https://github.com/Aircoookie/WLED/issues/4369).
 
