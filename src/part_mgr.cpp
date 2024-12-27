@@ -89,8 +89,10 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     _add_output(ws, "\n\n");
 
     // info text
-    _add_output(ws, "NOTE: If you do not see a line with 'Ready' at the end, this process didn't work.\n\n");
-
+    if (!test_only) {
+        _add_output(ws, "NOTE: If you do not see a line with 'Ready' at the end,\nthis process didn't work.\n\n");
+    }
+    
     // 1. confirm first app partition is active
     const esp_partition_t* p_running = esp_ota_get_running_partition();
     const esp_partition_t* p_next = esp_ota_get_next_update_partition(NULL);
@@ -139,7 +141,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     }
     _add_output(ws, "Created local copy of partiton table: OK\n");
     for (int i=0; i<partition_count; i++) {
-        snprintf(c_buffer, sizeof(c_buffer), "Type: %02x, Subtype: %02x, Addr: 0x%08x, Size: 0x%08x (%dK), Label: %s\n",
+        snprintf(c_buffer, sizeof(c_buffer), "Type: %02x / %02x, Addr: 0x%06x, Size: 0x%06x (%dK): %s\n",
                 partitions[i]->type, partitions[i]->subtype, partitions[i]->address, partitions[i]->size, (int)(partitions[i]->size/1024), partitions[i]->label);
         _add_output(ws, c_buffer);
     }
@@ -206,11 +208,11 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     if (partitions[data_index]->size >= ( 
         (partitions[app1_index]->size - RESIZE_APP_PARTITION_SIZE) +
         (partitions[app0_index]->size - RESIZE_APP_PARTITION_SIZE) ) ) {
-        _add_output(ws, "ERROR: Data partition is not large enough to accomodate new app partitions.\n");
+        _add_output(ws, "ERROR: Data partition is not large enough.\n");
         free(partition_buffer);
         return;
     }
-    _add_output(ws, "Data partition is large enough to accomodate new app partitions: OK\n");
+    _add_output(ws, "Data partition is large enough: OK\n");
     _add_output(ws, "\n");
 
     // 5. calculate new data partition size
@@ -222,22 +224,22 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
         (RESIZE_APP_PARTITION_SIZE - partitions[app0_index]->size);
     uint32_t new_app1_address = partitions[app1_index]->address + 
         (RESIZE_APP_PARTITION_SIZE - partitions[app0_index]->size);
-    snprintf(c_buffer, sizeof(c_buffer), "Old: app0 partition address: 0x%08x, size: 0x%08x (%dK)\n",
+    snprintf(c_buffer, sizeof(c_buffer), "Old: app0 address: 0x%06x, size: 0x%06x (%dK)\n",
             partitions[app0_index]->address, partitions[app0_index]->size, (int)(partitions[app0_index]->size/1024));
     _add_output(ws, c_buffer);
-    snprintf(c_buffer, sizeof(c_buffer), "Old: app1 partition address: 0x%08x, size: 0x%08x (%dK)\n",
+    snprintf(c_buffer, sizeof(c_buffer), "Old: app1 address: 0x%06x, size: 0x%06x (%dK)\n",
             partitions[app1_index]->address, partitions[app1_index]->size, (int)(partitions[app1_index]->size/1024));
     _add_output(ws, c_buffer);
-    snprintf(c_buffer, sizeof(c_buffer), "Old: data partition address: 0x%08x, size: 0x%08x (%dK)\n",
+    snprintf(c_buffer, sizeof(c_buffer), "Old: data address: 0x%06x, size: 0x%06x (%dK)\n",
             partitions[data_index]->address, partitions[data_index]->size, (int)(partitions[data_index]->size/1024));
     _add_output(ws, c_buffer);
-    snprintf(c_buffer, sizeof(c_buffer), "New: app0 partition address: 0x%08x, size: 0x%08x (%dK)\n",
+    snprintf(c_buffer, sizeof(c_buffer), "New: app0 address: 0x%06x, size: 0x%06x (%dK)\n",
             partitions[app0_index]->address, RESIZE_APP_PARTITION_SIZE, (int)(RESIZE_APP_PARTITION_SIZE/1024));
     _add_output(ws, c_buffer);
-    snprintf(c_buffer, sizeof(c_buffer), "New: app1 partition address: 0x%08x, size: 0x%08x (%dK)\n",
+    snprintf(c_buffer, sizeof(c_buffer), "New: app1 address: 0x%06x, size: 0x%06x (%dK)\n",
             new_app1_address, RESIZE_APP_PARTITION_SIZE, (int)(RESIZE_APP_PARTITION_SIZE/1024));
     _add_output(ws, c_buffer);
-    snprintf(c_buffer, sizeof(c_buffer), "New: data partition address: 0x%08x, size: 0x%08x (%dK)\n",
+    snprintf(c_buffer, sizeof(c_buffer), "New: data address: 0x%06x, size: 0x%06x (%dK)\n",
             new_data_address, new_data_size, (int)(new_data_size/1024));
     _add_output(ws, c_buffer);
     if (new_data_address - partitions[data_index]->address < SPI_FLASH_SEC_SIZE) {

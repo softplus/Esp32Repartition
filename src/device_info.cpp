@@ -29,7 +29,7 @@ void getDeviceInfo(char* info, size_t infoSize) {
     }
 
     snprintf(info, infoSize,
-             "Build Date & Time: %s %s on SDK %s / %u (%s)\n"
+             "Build: %s %s SDK %s / %u (%s)\n"
              "Flash chip ID / Size: 0x%x / %u KB\n"
              "Program heap / program size: %u KB / %u KB",
              __DATE__, __TIME__,
