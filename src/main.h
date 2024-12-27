@@ -17,8 +17,19 @@
   #define DEBUG_PRINTF(x...)
 #endif
 
-// used to chunk output
-#define HTML_INTRO F("<html><head></head><body><div id='pre'>\n<pre>")
-#define HTML_OUTRO F("</pre></div><footer><a href='/'>Home</a></footer></body></html>\n")
+// used to output log as HTML
+#define HTML_INTRO F("<!DOCTYPE html><html><head><meta charset='utf-8' />" \
+  "<meta name='viewport' content='width=device-width, initial-scale=1' />" \
+  "<title>ESP32Repartition</title></head><body><div id='main'><pre>")
+
+#define HTML_OUTRO F("</pre></div><footer><a href='/'>Home</a></footer>" \
+  "<script>function downloadPageText() {" \
+  "const t = document.body.innerText; " \
+  "const a = document.createElement('a');" \
+  "a.href = URL.createObjectURL(new Blob([t], {type: 'text/plain'})); " \
+  "a.download = 'page-content.txt'; a.click(); " \
+  "} </script>" \
+  "<br/>Need a record? Save this log locally: <button onclick='downloadPageText()'>Download log</button>" \
+  "</body></html>\n")
 
 #endif // MAIN_H
