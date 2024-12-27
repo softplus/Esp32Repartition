@@ -1,6 +1,8 @@
 .pio/
 .vscode/
 sdkconfig.*.old
+bootloader-old.bin
+partitions-old.bin
 
 # Prerequisites
 *.d
