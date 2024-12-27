@@ -17,7 +17,6 @@
 
 // Definitions from the ESP SDK & from poking around.
 #define PARTITION_TABLE_SIZE 0x0C00
-#define RESIZE_APP_PARTITION_SIZE 0x180000 // (1536K)
 #define MAX_NUMBER_OF_PARTITIONS 10 // arbitrary, we just want to be sure we have things ok
 
 typedef struct {
