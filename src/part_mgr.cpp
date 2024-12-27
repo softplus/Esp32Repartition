@@ -17,20 +17,28 @@
 
 // Definitions from the ESP SDK & from poking around.
 #define PARTITION_TABLE_SIZE 0x0C00
-#define RESIZE_APP_PARTITION_SIZE 0x180000 // (1536K)
 #define MAX_NUMBER_OF_PARTITIONS 10 // arbitrary, we just want to be sure we have things ok
 
 typedef struct {
-    uint16_t flash_chip;                /*!< SPI flash chip on which the partition resides */
+    uint16_t magic_id;                  /*!< It's magic */
     uint8_t type;                       /*!< partition type (app/data) */
     uint8_t subtype;                    /*!< partition subtype */
     uint32_t address;                   /*!< starting address of the partition in flash */
     uint32_t size;                      /*!< size of the partition, in bytes */
-    //uint32_t erase_size;              /*!< size the erase operation should be aligned to */
     char label[17];                     /*!< partition label, zero-terminated ASCII string */
     bool encrypted;                     /*!< flag is set to true if partition is encrypted */
     bool readonly;                      /*!< flag is set to true if partition is read-only */
 } _my_esp_partition_t; // <- structure in partition table, from ESP SDK
+
+
+typedef struct {
+    uint32_t address_old;
+    uint32_t address_new;
+    uint32_t size_old;
+    uint32_t size_new;
+    bool action_erase;
+    bool action_move;
+} _my_partition_planner_t;
 
 // get the address of the partition table; either 0x8000 or 0x9000; 0=failed
 size_t getPartitionTableAddr() {
@@ -40,7 +48,7 @@ size_t getPartitionTableAddr() {
         return cached_addr;
     }
     uint8_t b_buffer[4];
-    for (size_t addr = 0; addr < 0xA000; addr += 0x1000) {
+    for (size_t addr = 0x8000; addr < 0xA000; addr += 0x1000) {
         DEBUG_PRINTF("Checking for partition table at 0x%08x\n", addr);
         esp_err_t err = spi_flash_read(addr, b_buffer, sizeof(b_buffer));
         if (err != ESP_OK) {
@@ -92,10 +100,24 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     if (!test_only) {
         _add_output(ws, "NOTE: If you do not see a line with 'Ready' at the end,\nthis process didn't work.\n\n");
     }
-    
+    // mostly just to double-check. You need to set these when compiling ESP-IDF with menuconfig.
+#ifdef CONFIG_SPI_FLASH_DANGEROUS_WRITE_ABORTS
+    _add_output(ws, "CONFIG_SPI_FLASH_DANGEROUS_WRITE_ABORTS is enabled. Won't work.\n");
+#endif
+#ifndef CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED
+    _add_output(ws, "CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED is not enabled. Won't work.\n");
+#endif
+#ifdef CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED
+    _add_output(ws, "CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED is enabled. Should work.\n");
+#endif
+
     // 1. confirm first app partition is active
     const esp_partition_t* p_running = esp_ota_get_running_partition();
     const esp_partition_t* p_next = esp_ota_get_next_update_partition(NULL);
+    if (p_next == NULL) {
+        _add_output(ws, "ERROR: There is only one app partition.\n");
+        return;
+    }
     if (p_running->address > p_next->address) {
         _add_output(ws, "ERROR: YOU MUST UPLOAD THE FIRMWARE AGAIN.\n");
         _add_output(ws, "The current partition is not the first one.\n");
@@ -113,7 +135,11 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     // 3. Copy partition table to local buffer
     _add_output(ws, "Reading partition table...\n");
     char *partition_buffer = (char *)malloc(SPI_FLASH_SEC_SIZE+1);
-    _my_esp_partition_t *partitions[MAX_NUMBER_OF_PARTITIONS];
+    if (partition_buffer == NULL) {
+        _add_output(ws, "Failed to allocate memory for partition buffer\n");
+        return;
+    }
+    _my_esp_partition_t *partitions[MAX_NUMBER_OF_PARTITIONS] = {NULL};
     esp_err_t err =
         spi_flash_read(getPartitionTableAddr(), partition_buffer, SPI_FLASH_SEC_SIZE);
     if (err != ESP_OK) {
@@ -129,7 +155,6 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     unsigned short partition_count = 0;
     size_t md5_offset = 0;
 
-    bool any_errors = false;
     for (size_t offset = 0; offset < SPI_FLASH_SEC_SIZE; offset += 32) {
         if ((*(partition_buffer+offset)==0xAA) && (*(partition_buffer+offset+1)==0x50)) {
             partitions[partition_count] = (_my_esp_partition_t*)(partition_buffer + offset);
@@ -147,105 +172,106 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     }
     _add_output(ws, "\n");
 
-    // 4. confirm that order is app, app, data; else fail
-    bool is_good = false;
-    int app0_index = -1, app1_index = -1, data_index = -1;
+    // 4. Confirm we have min 2x app, and min 1 data
+    int app_count = 0, data_count = 0;
     for (int i=0; i<partition_count; i++) {
-        snprintf(c_buffer, sizeof(c_buffer), "... Checking index %d, Label: %s\n",
-                i, partitions[i]->label);
-        _add_output(ws, c_buffer);  
-        if (partitions[i]->type == ESP_PARTITION_TYPE_APP) { // first app partition
-            app0_index = i;
-            if (i+2>partition_count) {
-                _add_output(ws, "ERROR: not enough paritions after first app partition.\n");
-                any_errors = true;
-                break;
-            }
-            if (partitions[i+1]->type != ESP_PARTITION_TYPE_APP) {
-                _add_output(ws, "ERROR: no sequential app partitions.\n");
-                any_errors = true;
-                break;
-            }
-            app1_index = i+1;
-            if (partitions[i+2]->type != ESP_PARTITION_TYPE_DATA) {
-                _add_output(ws, "ERROR: no data partition after app partitions.\n");
-                any_errors = true;
-                break;
-            }
-            data_index = i+2;
-            if (i+2==partition_count-1) {
-                is_good = true;
-                break;
-            }
-            snprintf(c_buffer, sizeof(c_buffer), "ERROR: extra partitions after data partition; index=%d, count=%d\n",
-                i, partition_count);
-            _add_output(ws, c_buffer);
-            any_errors = true;
-            break;
+        if (partitions[i]->type == ESP_PARTITION_TYPE_APP) {
+            app_count++;
+        } else if (partitions[i]->type == ESP_PARTITION_TYPE_DATA) {
+            data_count++;
         }
     }
-    if (!is_good) {
-        _add_output(ws, "ERROR: partition table does not have app, app, data order.\n");
-        any_errors = true;
-    }
-    if (any_errors) {
-        _add_output(ws, "Aborting.");
+    if ((app_count < 2) || (data_count < 1)) {
+        _add_output(ws, "ERROR: Need 2+ app, 1+ data partitions; can't continue.\n");
         free(partition_buffer);
         return;
     }
-    _add_output(ws, "Partition order is app, app, data: OK\n");
 
-    // check if app actually needs resizing
-    if (partitions[app1_index]->size >= RESIZE_APP_PARTITION_SIZE && 
-        partitions[app0_index]->size >= RESIZE_APP_PARTITION_SIZE) {
-        _add_output(ws, "\nUNNECESSARY: App partitions are already ideal size.\n");
-        _add_output(ws, "\nREADY TO GO - upload the firmware you want.\n");
+    // make planning copy
+    _my_partition_planner_t planner[MAX_NUMBER_OF_PARTITIONS];
+    for (int i=0; i<partition_count; i++) {
+        planner[i].address_old = partitions[i]->address;
+        planner[i].size_old = partitions[i]->size;
+        // defaults
+        planner[i].address_new = 0; planner[i].size_new = 0;
+        planner[i].action_erase = false; planner[i].action_move = false;
+    }
+
+    // plan to resize app partitions
+    uint32_t size_delta = 0;
+    int first_app_index = -1;
+    for (int i=0; i<partition_count; i++) {
+        if (partitions[i]->type == ESP_PARTITION_TYPE_APP && 
+            (partitions[i]->subtype == ESP_PARTITION_SUBTYPE_APP_OTA_0 ||
+             partitions[i]->subtype == ESP_PARTITION_SUBTYPE_APP_OTA_1)) {
+            if (partitions[i]->size < RESIZE_APP_PARTITION_SIZE) {
+                size_delta += RESIZE_APP_PARTITION_SIZE - partitions[i]->size;
+                planner[i].size_new = RESIZE_APP_PARTITION_SIZE;
+                if (first_app_index == -1) {
+                    first_app_index = i;
+                } else {
+                    planner[i].action_erase = true;
+                }
+            }
+        }
+    }
+    if (size_delta == 0) {
+        _add_output(ws, "UNNECESSARY: App partitions are already ideal size.\n");
+        _add_output(ws, "READY TO GO - upload the firmware you want.\n");
         _add_output(ws, "<a href='/update'>Upload new firmware</a>\n");
         free(partition_buffer);
         return;
     }
-    // check if data partition is large enough
-    if (partitions[data_index]->size >= ( 
-        (partitions[app1_index]->size - RESIZE_APP_PARTITION_SIZE) +
-        (partitions[app0_index]->size - RESIZE_APP_PARTITION_SIZE) ) ) {
+
+    // find biggest data partition to shrink
+    int biggest_data_index = 0; uint32_t biggest_data_size = 0;
+    for (int i=0; i<partition_count; i++) {
+        if (partitions[i]->type == ESP_PARTITION_TYPE_DATA) {
+            if (partitions[i]->size > biggest_data_size) {
+                biggest_data_size = partitions[i]->size;
+                biggest_data_index = i;
+            }
+        }
+    }
+    if (biggest_data_size < size_delta) {
         _add_output(ws, "ERROR: Data partition is not large enough.\n");
         free(partition_buffer);
         return;
     }
-    _add_output(ws, "Data partition is large enough: OK\n");
-    _add_output(ws, "\n");
+    planner[biggest_data_index].size_new = biggest_data_size - size_delta;
 
-    // 5. calculate new data partition size
-    uint32_t new_data_size = (partitions[data_index]->size - 
-        ((RESIZE_APP_PARTITION_SIZE - partitions[app1_index]->size) +
-         (RESIZE_APP_PARTITION_SIZE - partitions[app0_index]->size)) );
-    uint32_t new_data_address = partitions[data_index]->address + 
-        (RESIZE_APP_PARTITION_SIZE - partitions[app1_index]->size) +
-        (RESIZE_APP_PARTITION_SIZE - partitions[app0_index]->size);
-    uint32_t new_app1_address = partitions[app1_index]->address + 
-        (RESIZE_APP_PARTITION_SIZE - partitions[app0_index]->size);
-    snprintf(c_buffer, sizeof(c_buffer), "Old: app0 address: 0x%06x, size: 0x%06x (%dK)\n",
-            partitions[app0_index]->address, partitions[app0_index]->size, (int)(partitions[app0_index]->size/1024));
-    _add_output(ws, c_buffer);
-    snprintf(c_buffer, sizeof(c_buffer), "Old: app1 address: 0x%06x, size: 0x%06x (%dK)\n",
-            partitions[app1_index]->address, partitions[app1_index]->size, (int)(partitions[app1_index]->size/1024));
-    _add_output(ws, c_buffer);
-    snprintf(c_buffer, sizeof(c_buffer), "Old: data address: 0x%06x, size: 0x%06x (%dK)\n",
-            partitions[data_index]->address, partitions[data_index]->size, (int)(partitions[data_index]->size/1024));
-    _add_output(ws, c_buffer);
-    snprintf(c_buffer, sizeof(c_buffer), "New: app0 address: 0x%06x, size: 0x%06x (%dK)\n",
-            partitions[app0_index]->address, RESIZE_APP_PARTITION_SIZE, (int)(RESIZE_APP_PARTITION_SIZE/1024));
-    _add_output(ws, c_buffer);
-    snprintf(c_buffer, sizeof(c_buffer), "New: app1 address: 0x%06x, size: 0x%06x (%dK)\n",
-            new_app1_address, RESIZE_APP_PARTITION_SIZE, (int)(RESIZE_APP_PARTITION_SIZE/1024));
-    _add_output(ws, c_buffer);
-    snprintf(c_buffer, sizeof(c_buffer), "New: data address: 0x%06x, size: 0x%06x (%dK)\n",
-            new_data_address, new_data_size, (int)(new_data_size/1024));
-    _add_output(ws, c_buffer);
-    if (new_data_address - partitions[data_index]->address < SPI_FLASH_SEC_SIZE) {
-        _add_output(ws, "ERROR: New data partition address offset by at least a sector.\n");
-        free(partition_buffer);
-        return;
+    // iterate through all partitions
+    uint32_t address_offset = 0;
+    for (int i=0; i<partition_count; i++) {
+        if (address_offset>0) {
+            planner[i].address_new = planner[i].address_old + address_offset;
+            if (!planner[i].action_erase) {
+                planner[i].action_move = true;
+                if (!planner[i].size_new) planner[i].size_new = planner[i].size_old;
+            }
+        }
+        if (planner[i].size_new != 0) {
+            address_offset += planner[i].size_new - planner[i].size_old;
+        }
+    }
+    _add_output(ws, "Partition table has 2+x app, 1+x data: OK\n");
+
+    // 5. update partition table based on new addresses + sizes
+    for (int i=0; i<partition_count; i++) {
+        if (planner[i].address_new != 0) {
+            partitions[i]->address = planner[i].address_new;
+        }
+        if (planner[i].size_new != 0) {
+            partitions[i]->size = planner[i].size_new;
+        }
+    }
+
+    // show new partition table
+    _add_output(ws, "New partition table:\n");
+    for (int i=0; i<partition_count; i++) {
+        snprintf(c_buffer, sizeof(c_buffer), "Type: %02x / %02x, Addr: 0x%06x, Size: 0x%06x (%dK): %s\n",
+                partitions[i]->type, partitions[i]->subtype, partitions[i]->address, partitions[i]->size, (int)(partitions[i]->size/1024), partitions[i]->label);
+        _add_output(ws, c_buffer);
     }
 
     if (test_only) {
@@ -255,53 +281,13 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     }
     _add_output(ws, "\nDoing the work now...\n");
 
-    // 6. erase data partition, app1 partition
-    // we're just erasing the first sector, should be ok
-    _add_output(ws, "Erasing data partition...\n");
-    err = spi_flash_erase_range(new_data_address, SPI_FLASH_SEC_SIZE);
-    if (err != ESP_OK) {
-        snprintf(c_buffer, sizeof(c_buffer), "Failed to erase data partition: 0x%x\n", err);
-        _add_output(ws, c_buffer);
-        free(partition_buffer);
-        return;
-    }
-
-    _add_output(ws, "Erasing app1 partition...\n");
-    err = spi_flash_erase_range(new_app1_address, SPI_FLASH_SEC_SIZE);
-    if (err != ESP_OK) {
-        snprintf(c_buffer, sizeof(c_buffer), "Failed to erase app1 partition: 0x%x\n", err);
-        _add_output(ws, c_buffer);
-        free(partition_buffer);
-        return;
-    }
-    _add_output(ws, "Partitions data + app1 erased: OK\n");
-    
-    // 7. write partition table
-    _add_output(ws, "Updating partition table...\n");
-    partitions[data_index]->address = new_data_address;
-    partitions[data_index]->size = new_data_size;
-    partitions[app1_index]->address = new_app1_address;
-    partitions[app1_index]->size = RESIZE_APP_PARTITION_SIZE;
-    partitions[app0_index]->size = RESIZE_APP_PARTITION_SIZE;
-
-    // calculate md5 of partition table
+    // calculate md5 of new partition table
     MD5Builder _md5 = MD5Builder();
     _md5.begin();
     _md5.add((uint8_t*)partition_buffer, md5_offset);
     _md5.calculate();
     _md5.getBytes((uint8_t*)(partition_buffer + md5_offset + 16));
    
-    // mostly just to double-check. You need to set these when compiling ESP-IDF with menuconfig.
-#ifdef CONFIG_SPI_FLASH_DANGEROUS_WRITE_ABORTS
-    _add_output(ws, "CONFIG_SPI_FLASH_DANGEROUS_WRITE_ABORTS is enabled. Won't work.\n");
-#endif
-#ifndef CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED
-    _add_output(ws, "CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED is not enabled. Won't work.\n");
-#endif
-#ifdef CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED
-    _add_output(ws, "CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED is enabled. Should work.\n");
-#endif
-
     // write partition table buffer back to flash
     _add_output(ws, "Erasing partition table...\n");
     err = spi_flash_erase_range(getPartitionTableAddr(), SPI_FLASH_SEC_SIZE);
@@ -321,7 +307,64 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     }
     _add_output(ws, "Partition table rewritten: OK\n");
 
-    
+    uint8_t* move_buffer = (uint8_t*)malloc(SPI_FLASH_SEC_SIZE);
+    if (move_buffer == NULL) {
+        snprintf(c_buffer, sizeof(c_buffer), "Failed to allocate memory for buffer\n");
+        _add_output(ws, c_buffer);
+        free(partition_buffer);
+        return;
+    }
+
+    // time to clean up partitions
+    for (int i = partition_count - 1; i >= 0; i--) {
+        if (planner[i].action_erase) {
+            snprintf(c_buffer, sizeof(c_buffer), "Erasing partition %i at 0x%x\n", i, planner[i].address_new);
+            _add_output(ws, c_buffer);
+            err = spi_flash_erase_range(planner[i].address_old, planner[i].size_old);
+            if (err != ESP_OK) {
+                snprintf(c_buffer, sizeof(c_buffer), "Failed to erase partition: 0x%x\n", err);
+                _add_output(ws, c_buffer);
+            }
+        }
+
+        if (planner[i].action_move && (planner[i].address_new!=planner[i].address_old)) {
+            snprintf(c_buffer, sizeof(c_buffer), "Moving partition %i from 0x%x to 0x%x ...\n",
+                     i, planner[i].address_old, planner[i].address_new);
+            _add_output(ws, c_buffer);
+            int counter = 0;
+            for (int32_t j = planner[i].size_new - SPI_FLASH_SEC_SIZE; j >= 0; j -= SPI_FLASH_SEC_SIZE) {
+                snprintf(c_buffer, sizeof(c_buffer), "0x%x  ", planner[i].address_old + j);
+                _add_output(ws, c_buffer);
+                counter++; if (counter % 8 == 0) _add_output(ws, "\n");
+                err = spi_flash_read(planner[i].address_old + j, move_buffer, SPI_FLASH_SEC_SIZE);
+                if (err != ESP_OK) {
+                    snprintf(c_buffer, sizeof(c_buffer), "Failed to read partition chunk: 0x%x\n", err);
+                    _add_output(ws, c_buffer);
+                    free(move_buffer);
+                    free(partition_buffer);
+                    break;
+                }
+                err = spi_flash_erase_range(planner[i].address_new+j, SPI_FLASH_SEC_SIZE);
+                if (err != ESP_OK) {
+                    snprintf(c_buffer, sizeof(c_buffer), "Failed to erase partition: 0x%x\n", err);
+                    _add_output(ws, c_buffer);
+                    // whatever, we will continue
+                }
+                err = spi_flash_write(planner[i].address_new + j, move_buffer, SPI_FLASH_SEC_SIZE);
+                if (err != ESP_OK) {
+                    snprintf(c_buffer, sizeof(c_buffer), "Failed to write partition chunk: 0x%x\n", err);
+                    _add_output(ws, c_buffer);
+                    // we will also continue
+                }
+            }
+            _add_output(ws, "\n");
+
+        }
+    }
+    free(move_buffer);
+
+    _add_output(ws, "Partitions erased / moved: OK\n");
+
     _add_output(ws, "Partition table updated.\n\n");
     _add_output(ws, "READY! After reboot, upload the firmware that you need.\n\n");
 
@@ -330,10 +373,8 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     _add_output(ws, HTML_OUTRO); // unless we already rebooted, lol
 
     unsigned long start = millis();
-    while (millis() - start < 2000) {
-        // Non-blocking delay
-        delay(100);
-    }
+    while (millis() - start < 2000) delay(100); // non-blocking delay
+
     _add_output(ws, "\n"); // sometimes it just doesn't send the rest. this is a hack.
     free(partition_buffer);
 

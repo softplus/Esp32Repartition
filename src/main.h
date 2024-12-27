@@ -4,6 +4,16 @@
 // Include necessary libraries
 #include <Arduino.h>
 
+// This is what the app partitions will be resized to.
+// Adjust this as needed.
+// Note that you cannot shrink app partitions, you can only expand them.
+// All app partitions will be made the same size.
+// The biggest data partition will be shrunk do adjust.
+// Partitions may be moved as needed.
+#define RESIZE_APP_PARTITION_SIZE 0x180000 // (1536K)
+// ^^^ adjust this as needed ^^^
+//
+
 #define DEBUG_MODE // or comment out to disable debug output
 #define DEBUGOUT Serial // where to send debug output
 
