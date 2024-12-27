@@ -135,7 +135,11 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     // 3. Copy partition table to local buffer
     _add_output(ws, "Reading partition table...\n");
     char *partition_buffer = (char *)malloc(SPI_FLASH_SEC_SIZE+1);
-    _my_esp_partition_t *partitions[MAX_NUMBER_OF_PARTITIONS];
+    if (partition_buffer == NULL) {
+        _add_output(ws, "Failed to allocate memory for partition buffer\n");
+        return;
+    }
+    _my_esp_partition_t *partitions[MAX_NUMBER_OF_PARTITIONS] = {NULL};
     esp_err_t err =
         spi_flash_read(getPartitionTableAddr(), partition_buffer, SPI_FLASH_SEC_SIZE);
     if (err != ESP_OK) {
@@ -151,7 +155,6 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     unsigned short partition_count = 0;
     size_t md5_offset = 0;
 
-    bool any_errors = false;
     for (size_t offset = 0; offset < SPI_FLASH_SEC_SIZE; offset += 32) {
         if ((*(partition_buffer+offset)==0xAA) && (*(partition_buffer+offset+1)==0x50)) {
             partitions[partition_count] = (_my_esp_partition_t*)(partition_buffer + offset);
