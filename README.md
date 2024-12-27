@@ -93,6 +93,7 @@ Potential to-dos:
 
 ## Changes
 
+* 2024-12-27: Release v0.2.0
 * 2024-12-15: Initial release - v0.1.0
 
 ## My notes
