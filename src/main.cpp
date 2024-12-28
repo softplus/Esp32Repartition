@@ -51,6 +51,7 @@ void handlePartitionFix();
 void handleDownloadFlash(size_t start, size_t end, const char *filename);
 void handleDownloadBootloader();
 void handleDownloadPartition();
+void handleDownloadApp1();
 
 // bind the server callbacks
 void bindServerCallback(){
@@ -58,6 +59,7 @@ void bindServerCallback(){
   wm.server->on("/partition-fix", handlePartitionFix);
   wm.server->on("/bootloader-download", handleDownloadBootloader);
   wm.server->on("/partition-download", handleDownloadPartition);
+  wm.server->on("/app1-download", handleDownloadApp1);
 }
 
 // Downloads a memory section
@@ -90,6 +92,14 @@ void handleDownloadBootloader() {
 void handleDownloadPartition() {
   size_t part_addr = getPartitionTableAddr();
   handleDownloadFlash(part_addr, part_addr+SPI_FLASH_SEC_SIZE, "current-partition.bin");
+}
+
+// Downloads the second app partition (likely where the old firmware was)
+// Downloading app0 makes no sense (it's this code)
+void handleDownloadApp1() {
+  esp_partition_t part;
+  getPartitionApp1(&part);
+  handleDownloadFlash(part.address, part.address+part.size, "current-app1.bin");
 }
 
 // handle the /partition-read route

@@ -73,6 +73,15 @@ void _add_output(std::unique_ptr<WebServer> & ws, const String& str) {
     _add_output(ws, str.c_str());
 };
 
+// gets the second app partition table entry
+void getPartitionApp1(esp_partition_t *part) {
+    const esp_partition_t* p_next = esp_ota_get_next_update_partition(NULL);
+    if (p_next == NULL) {
+        return;
+    }
+    memcpy(part, p_next, sizeof(esp_partition_t));
+}
+
 // Expand app partitions to our ideal size, output to response 
 void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     char c_buffer[256];
@@ -366,7 +375,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
             }
             if (counter % 8 != 0) _add_output(ws, "\n ");
             time_end = micros();
-            snprintf(c_buffer, sizeof(c_buffer), " ... Partition moved %i sectors in %lu ms (%lu ms/sector)\n", 
+            snprintf(c_buffer, sizeof(c_buffer), "... Partition moved %i sectors in %lu ms (%lu ms/sector)\n", 
                 counter, (time_end-time_start)/1000, (time_end-time_start)/(1000*counter));
             _add_output(ws, c_buffer);
         }
