@@ -6,6 +6,7 @@
 
 #include "esp_spi_flash.h"
 #include "esp_ota_ops.h"
+#include "esp_flash_encrypt.h"
 #include "esp_image_format.h"
 #include "main.h"
 #include "part_mgr.h"
@@ -99,6 +100,13 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     // info text
     if (!test_only) {
         _add_output(ws, "NOTE: If you do not see a line with 'Ready' at the end,\nthis process didn't work.\n\n");
+    }
+
+    // Check for flash encryption - we can't do anything if it's encrypted
+    // Rewriting the partition table will brick your device.
+    if (esp_flash_encryption_enabled()) {
+        _add_output(ws, "ERROR: Flash encryption is enabled. Can't continue.\n");
+        return;
     }
 
     // 1. confirm first app partition is active
