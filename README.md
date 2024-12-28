@@ -91,6 +91,12 @@ Potential to-dos:
 
 ## Changes
 
+[Releases](https://github.com/softplus/Esp32Repartition/releases)
+
+* 2024-12-28: Release v0.4.0
+  * Checks for encrypted flash & aborts if so
+  * Added support to download app1 partition
+  * Added timing of steps
 * 2024-12-27: Release v0.3.0
   * Add support for various configurations with min 2x app, 1x data
   * Move data partitions instead of deleting
