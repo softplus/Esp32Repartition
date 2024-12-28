@@ -147,6 +147,7 @@ void setup()
       "<form action='/partition-download' method='get'><button>Download partition table</button></form><br/>"
       "</div><br/><br/>"
       "<a href='https://github.com/softplus/Esp32Repartition'>Esp32Repartition on Github</a><br/>"
+      "<script>document.head.prepend(Object.assign(document.createElement('meta'),{name:'robots',content:'noindex'}));</script>"
       );
 
     wm.setWebServerCallback(bindServerCallback);

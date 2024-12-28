@@ -30,6 +30,7 @@
 // used to output log as HTML
 #define HTML_INTRO F("<!DOCTYPE html><html><head><meta charset='utf-8' />" \
   "<meta name='viewport' content='width=device-width, initial-scale=1' />" \
+  "<meta name='robots' content='noindex'>" \
   "<title>ESP32Repartition</title></head><body><div id='main'><pre>")
 
 #define HTML_OUTRO F("</pre></div><footer><a href='/'>Home</a></footer>" \
