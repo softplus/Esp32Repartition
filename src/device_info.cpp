@@ -29,14 +29,14 @@ void getDeviceInfo(char* info, size_t infoSize) {
     }
 
     snprintf(info, infoSize,
-             "Build: %s %s SDK %s / %u (%s)\n"
+             "Build %s - %s %s\n"
+             "ESP SDK %s / %u (%s)\n"
              "Flash chip ID / Size: 0x%x / %u KB\n"
-             "Program heap / program size: %u KB / %u KB",
-             __DATE__, __TIME__,
+             "Program heap / size: %u KB / %u KB",
+             FIRMWARE_VERSION, __DATE__, __TIME__,
              ESP.getSdkVersion(), chipId, ESP.getChipModel(),
              ESP_getFlashChipId(), _ESP_getFlashChipSize()/1024,
-             ESP.getHeapSize()/1024, ESP.getSketchSize()/1024
-             );
+             ESP.getHeapSize()/1024, ESP.getSketchSize()/1024);
 }
 
 // get MD5 of bootloader
