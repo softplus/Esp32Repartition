@@ -100,16 +100,6 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     if (!test_only) {
         _add_output(ws, "NOTE: If you do not see a line with 'Ready' at the end,\nthis process didn't work.\n\n");
     }
-    // mostly just to double-check. You need to set these when compiling ESP-IDF with menuconfig.
-#ifdef CONFIG_SPI_FLASH_DANGEROUS_WRITE_ABORTS
-    _add_output(ws, "CONFIG_SPI_FLASH_DANGEROUS_WRITE_ABORTS is enabled. Won't work.\n");
-#endif
-#ifndef CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED
-    _add_output(ws, "CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED is not enabled. Won't work.\n");
-#endif
-#ifdef CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED
-    _add_output(ws, "CONFIG_SPI_FLASH_DANGEROUS_WRITE_ALLOWED is enabled. Should work.\n");
-#endif
 
     // 1. confirm first app partition is active
     const esp_partition_t* p_running = esp_ota_get_running_partition();
@@ -124,7 +114,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
         _add_output(ws, "<a href='/update'>Upload firmware again</a>\n");
         return;
     }
-    _add_output(ws, "Current app parition is first: OK!\n");
+    _add_output(ws, "Current app parition is first: OK\n");
 
     // 2. Check if partition table findable
     if (getPartitionTableAddr() == 0) {
@@ -148,7 +138,6 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
         free(partition_buffer);
         return;
     }
-    _add_output(ws, "Done reading.\n");
 
     // separate out partitions
     _add_output(ws, "Splitting partitions out...\n");
@@ -289,6 +278,7 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     _md5.getBytes((uint8_t*)(partition_buffer + md5_offset + 16));
    
     // write partition table buffer back to flash
+    unsigned long time_start = micros();
     _add_output(ws, "Erasing partition table...\n");
     err = spi_flash_erase_range(getPartitionTableAddr(), SPI_FLASH_SEC_SIZE);
     if (err != ESP_OK) {
@@ -305,7 +295,9 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
         free(partition_buffer);
         return;
     }
-    _add_output(ws, "Partition table rewritten: OK\n");
+    unsigned long time_end = micros();
+    snprintf(c_buffer, sizeof(c_buffer), " ... Partition table written in %lu ms\n", (time_end-time_start)/1000);
+    _add_output(ws, c_buffer);
 
     uint8_t* move_buffer = (uint8_t*)malloc(SPI_FLASH_SEC_SIZE);
     if (move_buffer == NULL) {
@@ -318,24 +310,31 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     // time to clean up partitions
     for (int i = partition_count - 1; i >= 0; i--) {
         if (planner[i].action_erase) {
-            snprintf(c_buffer, sizeof(c_buffer), "Erasing partition %i at 0x%x\n", i, planner[i].address_new);
+            snprintf(c_buffer, sizeof(c_buffer), "Erasing partition %i at 0x%x, length 0x%x\n", 
+                    i, planner[i].address_new, planner[i].size_new);
             _add_output(ws, c_buffer);
+            time_start = micros();
             err = spi_flash_erase_range(planner[i].address_old, planner[i].size_old);
             if (err != ESP_OK) {
                 snprintf(c_buffer, sizeof(c_buffer), "Failed to erase partition: 0x%x\n", err);
+                _add_output(ws, c_buffer);
+            } else {
+                time_end = micros();
+                snprintf(c_buffer, sizeof(c_buffer), " ... Partition erased in %lu ms\n", (time_end-time_start)/1000);
                 _add_output(ws, c_buffer);
             }
         }
 
         if (planner[i].action_move && (planner[i].address_new!=planner[i].address_old)) {
-            snprintf(c_buffer, sizeof(c_buffer), "Moving partition %i from 0x%x to 0x%x ...\n",
-                     i, planner[i].address_old, planner[i].address_new);
+            snprintf(c_buffer, sizeof(c_buffer), "Moving partition %i from 0x%x to 0x%x length 0x%x ...\n ",
+                     i, planner[i].address_old, planner[i].address_new, planner[i].size_new);
             _add_output(ws, c_buffer);
             int counter = 0;
+            time_start = micros();
             for (int32_t j = planner[i].size_new - SPI_FLASH_SEC_SIZE; j >= 0; j -= SPI_FLASH_SEC_SIZE) {
                 snprintf(c_buffer, sizeof(c_buffer), "0x%x  ", planner[i].address_old + j);
                 _add_output(ws, c_buffer);
-                counter++; if (counter % 8 == 0) _add_output(ws, "\n");
+                counter++; if (counter % 8 == 0) _add_output(ws, "\n ");
                 err = spi_flash_read(planner[i].address_old + j, move_buffer, SPI_FLASH_SEC_SIZE);
                 if (err != ESP_OK) {
                     snprintf(c_buffer, sizeof(c_buffer), "Failed to read partition chunk: 0x%x\n", err);
@@ -357,8 +356,11 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
                     // we will also continue
                 }
             }
-            _add_output(ws, "\n");
-
+            if (counter % 8 != 0) _add_output(ws, "\n ");
+            time_end = micros();
+            snprintf(c_buffer, sizeof(c_buffer), " ... Partition moved %i sectors in %lu ms (%lu ms/sector)\n", 
+                counter, (time_end-time_start)/1000, (time_end-time_start)/(1000*counter));
+            _add_output(ws, c_buffer);
         }
     }
     free(move_buffer);
@@ -372,8 +374,8 @@ void partition_mgr_fix(std::unique_ptr<WebServer> & ws, bool test_only) {
     _add_output(ws, "\n");
     _add_output(ws, HTML_OUTRO); // unless we already rebooted, lol
 
-    unsigned long start = millis();
-    while (millis() - start < 2000) delay(100); // non-blocking delay
+    time_start = millis();
+    while (millis() - time_start < 2000) delay(100); // non-blocking delay
 
     _add_output(ws, "\n"); // sometimes it just doesn't send the rest. this is a hack.
     free(partition_buffer);
